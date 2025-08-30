@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Recipe Manager</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #fefefe;
+      margin: 20px;
+    }
+    .container {
+      background: #f8f8f8;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      width: 300px;
+      margin: auto;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background-color: #ff7f50;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .error, .success {
+      text-align: center;
+      margin-top: 10px;
+    }
+    .error { color: red; }
+    .success { color: green; }
+    .hidden { display: none; }
+
+    #recipeSection {
+      max-width: 800px;
+      margin: auto;
+    }
+    form {
+      background: #f8f8f8;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button.delete-btn {
+      background-color: #4CAF50;
+      margin-top: 10px;
+      padding: 5px 10px;
+      font-size: 0.9rem;
+      border-radius: 4px;
+      cursor: pointer;
+      color: white;
+      border: none;
+    }
+    .search-bar {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+    }
+    .search-bar input {
+      flex: 1;
+    }
+    .recipe-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .recipe {
+      background: #fff7f0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+    .logout-btn {
+      float: right;
+      margin-top: -40px;
+      background: #999;
+    }
+  </style>
+</head>
+<body>
+  <div id="authSection">
+    <div class="container" id="loginContainer">
+      <h2>Login</h2>
+      <form id="loginForm">
+        <label for="loginUsername">Username</label>
+        <input type="text" id="loginUsername" required />
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required />
+        <button type="submit">Login</button>
+      </form>
+      <div id="loginError" class="error"></div>
+    </div>
+    <div class="container" id="registerContainer" style="margin-top: 30px;">
+      <h2>Register</h2>
+      <form id="registerForm">
+        <label for="registerUsername">Username</label>
+        <input type="text" id="registerUsername" required />
+        <label for="registerPassword">Password</label>
+        <input type="password" id="registerPassword" required />
+        <label for="registerRole">Role</label>
+        <select id="registerRole" required>
+          <option value="">--Select Role--</option>
+          <option value="admin">Admin</option>
+          <option value="user">User</option>
+        </select>
+        <button type="submit">Register</button>
+      </form>
+      <div id="registerMsg" class="error"></div>
+    </div>
+  </div>
+  <div id="recipeSection" class="hidden">
+    <h1>🍴 Recipe Manager</h1>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+    <form id="recipeForm" class="hidden">
+      <label for="name">Recipe Name</label>
+      <input type="text" id="name" required />
+      <label for="category">Category</label>
+      <select id="category" required>
+        <option value="">--Select--</option>
+        <option value="Main Course">Main Course</option>
+        <option value="Dessert">Dessert</option>
+        <option value="Snack">Snack</option>
+        <option value="Drink">Drink</option>
+      </select>
+      <label for="ingredients">Ingredients (comma-separated)</label>
+      <input type="text" id="ingredients" required />
+      <label for="instructions">Cooking Instructions</label>
+      <textarea id="instructions" rows="4" required></textarea>
+      <label for="image">Image URL</label>
+      <input type="text" id="image" />
+      <button type="submit">Add Recipe</button>
+    </form>
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="Search by name or category..." />
+      <button id="searchButton">Search</button>
+      <button id="backButton" style="display:none;">Back</button>
+    </div>
+    <div class="recipe-list" id="recipeList"></div>
+  </div>
+  <script>
+    let users = JSON.parse(localStorage.getItem('users')) || [];
+    const loginForm = document.getElementById('loginForm');
+    const loginError = document.getElementById('loginError');
+    const registerForm = document.getElementById('registerForm');
+    const registerMsg = document.getElementById('registerMsg');
+    const authSection = document.getElementById('authSection');
+    const recipeSection = document.getElementById('recipeSection');
+    const recipeForm = document.getElementById('recipeForm');
+    const recipeList = document.getElementById('recipeList');
+    const searchInput = document.getElementById('searchInput');
+    const searchButton = document.getElementById('searchButton');
+    const backButton = document.getElementById('backButton');
+    let loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+
+    function showRecipeManager() {
+      authSection.classList.add('hidden');
+      recipeSection.classList.remove('hidden');
+      if (loggedInUser.role === 'admin') recipeForm.classList.remove('hidden');
+      fetchRecipesFromBackend();
+    }
+    if (loggedInUser) showRecipeManager();
+
+    loginForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const username = loginForm.loginUsername.value.trim();
+      const password = loginForm.loginPassword.value;
+      const user = users.find(u => u.username === username && u.password === password);
+      if (user) {
+        localStorage.setItem('loggedInUser', JSON.stringify(user));
+        loggedInUser = user;
+        showRecipeManager();
+      } else loginError.textContent = "Invalid username or password";
+    });
+
+    registerForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const username = registerForm.registerUsername.value.trim();
+      const password = registerForm.registerPassword.value;
+      const role = registerForm.registerRole.value;
+      if (users.find(u => u.username === username)) {
+        registerMsg.textContent = "Username already taken!";
+        registerMsg.className = "error";
+        return;
+      }
+      users.push({ username, password, role });
+      localStorage.setItem('users', JSON.stringify(users));
+      registerMsg.textContent = "Registration successful! You can now login.";
+      registerMsg.className = "success";
+      registerForm.reset();
+    });
+
+    async function fetchRecipesFromBackend() {
+      try {
+        const res = await fetch('http://localhost:3000/recipes');
+        if (!res.ok) throw new Error('Failed to fetch recipes');
+        const recipes = await res.json();
+        window.recipes = recipes;
+        renderRecipes(recipes);
+      } catch (err) {
+        recipeList.innerHTML = `<p class="error">Error loading recipes: ${err.message}</p>`;
+      }
+    }
+
+    function renderRecipes(recipes) {
+      if (!recipes.length) {
+        recipeList.innerHTML = '<p>No recipes found.</p>';
+        return;
+      }
+      recipeList.innerHTML = '';
+      recipes.forEach(recipe => {
+        const div = document.createElement('div');
+        div.className = 'recipe';
+
+        const commentsHTML = (recipe.comments || []).map(c => `<li><strong>${c.username}:</strong> ${c.comment}</li>`).join('');
+
+        div.innerHTML = `
+          <h3>${recipe.title}</h3>
+          ${recipe.image ? `<img src="${recipe.image}" alt="${recipe.title}" style="max-width: 100%; border-radius: 6px; margin-bottom: 10px;" />` : ''}
+          <p><strong>Category:</strong> ${recipe.category}</p>
+          <p><strong>Ingredients:</strong> ${recipe.ingredients.join(', ')}</p>
+          <p><strong>Instructions:</strong> ${recipe.instructions}</p>
+          <p><strong>Added by:</strong> ${recipe.createdBy || 'Unknown'}</p>
+          <div><strong>Comments:</strong><ul>${commentsHTML}</ul></div>
+          <form class="comment-form" data-id="${recipe.id}">
+            <input type="text" placeholder="Add a comment..." required />
+            <button type="submit">Comment</button>
+          </form>
+          ${loggedInUser.role === 'admin' ? `<button class="delete-btn" data-id="${recipe.id}">Delete</button>` : ''}
+        `;
+        recipeList.appendChild(div);
+      });
+
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          try {
+            const res = await fetch(`http://localhost:3000/recipes/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Delete failed');
+            fetchRecipesFromBackend();
+          } catch (err) {
+            alert('Error deleting recipe: ' + err.message);
+          }
+        });
+      });
+
+      document.querySelectorAll('.comment-form').forEach(form => {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const id = form.getAttribute('data-id');
+          const input = form.querySelector('input');
+          const commentText = input.value.trim();
+          if (!commentText) return;
+
+          const commentObj = { comment: commentText, username: loggedInUser.username };
+
+          try {
+            const res = await fetch(`http://localhost:3000/recipes/${id}/comment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(commentObj)
+            });
+            if (!res.ok) throw new Error('Failed to post comment');
+            input.value = '';
+            fetchRecipesFromBackend();
+          } catch (err) {
+            alert('Error adding comment: ' + err.message);
+          }
+        });
+      });
+    }
+
+    recipeForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newRecipe = {
+        title: document.getElementById('name').value.trim(),
+        category: document.getElementById('category').value,
+        ingredients: document.getElementById('ingredients').value.split(',').map(s => s.trim()),
+        instructions: document.getElementById('instructions').value.trim(),
+        image: document.getElementById('image').value.trim(),
+        createdBy: loggedInUser.username
+      };
+      try {
+        const res = await fetch('http://localhost:3000/recipes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newRecipe)
+        });
+        if (!res.ok) throw new Error('Failed to add recipe');
+        recipeForm.reset();
+        fetchRecipesFromBackend();
+      } catch (err) {
+        alert('Error adding recipe: ' + err.message);
+      }
+    });
+
+    searchButton.addEventListener('click', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      if (!q) return;
+      const filtered = window.recipes.filter(r =>
+        r.title.toLowerCase().includes(q) ||
+        r.category.toLowerCase().includes(q)
+      );
+      renderRecipes(filtered);
+      backButton.style.display = 'inline-block';
+      searchButton.style.display = 'none';
+    });
+
+    backButton.addEventListener('click', () => {
+      searchInput.value = '';
+      renderRecipes(window.recipes);
+      backButton.style.display = 'none';
+      searchButton.style.display = 'inline-block';
+    });
+
+    function logout() {
+      localStorage.removeItem('loggedInUser');
+      location.reload();
+    }
+  </script>
+</body>
+</html>
